@@ -145,6 +145,31 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
     }
 }
 
+/// Adds columns that were introduced after a database file may have been created.
+///
+/// The project has no migration framework: tables are created once from `create.sql`.
+/// This keeps databases built by older versions readable, since Diesel expects the
+/// `Games` table to expose every column declared in `schema.rs`.
+fn upgrade_schema(conn: &mut SqliteConnection) -> Result<(), diesel::result::Error> {
+    let games_table_exists: i64 = diesel::dsl::sql::<diesel::sql_types::BigInt>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'Games'",
+    )
+    .get_result(conn)?;
+    if games_table_exists == 0 {
+        return Ok(());
+    }
+
+    let has_orientation: i64 = diesel::dsl::sql::<diesel::sql_types::BigInt>(
+        "SELECT COUNT(*) FROM pragma_table_info('Games') WHERE name = 'Orientation'",
+    )
+    .get_result(conn)?;
+    if has_orientation == 0 {
+        conn.batch_execute("ALTER TABLE Games ADD COLUMN Orientation TEXT;")?;
+    }
+
+    Ok(())
+}
+
 fn get_db_or_create(
     state: &State<AppState>,
     db_path: &str,
@@ -160,6 +185,7 @@ fn get_db_or_create(
                 .max_size(16)
                 .connection_customizer(Box::new(options))
                 .build(ConnectionManager::<SqliteConnection>::new(db_path))?;
+            upgrade_schema(&mut *pool.get()?)?;
             state
                 .connection_pool
                 .insert(db_path.to_string(), pool.clone());
@@ -214,6 +240,7 @@ pub struct TempGame {
     pub time_control: Option<String>,
     pub eco: Option<String>,
     pub fen: Option<String>,
+    pub orientation: Option<String>,
     pub moves: Vec<u8>,
     pub position: Chess,
     pub material_count: MaterialColor,
@@ -271,6 +298,7 @@ impl TempGame {
             result: self.result.as_deref(),
             moves: self.moves.as_slice(),
             pawn_home: pawn_home as i32,
+            orientation: self.orientation.as_deref(),
         };
 
         create_game(db, new_game)?;
@@ -352,6 +380,11 @@ impl Visitor for Importer {
             self.game.event_name = Some(String::from_utf8_lossy(value.as_bytes()).to_string());
         } else if key == b"Result" {
             self.game.result = Some(String::from_utf8_lossy(value.as_bytes()).to_string());
+        } else if key == b"Orientation" {
+            let orientation = value.decode_utf8_lossy().to_lowercase();
+            if orientation == "white" || orientation == "black" {
+                self.game.orientation = Some(orientation);
+            }
         } else if key == b"FEN" {
             if value.as_bytes() == b"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" {
                 self.game.fen = None;
@@ -1143,6 +1176,7 @@ fn normalize_games(games: Vec<(Game, Player, Player, Event, Site)>) -> Vec<Norma
                 time_control: game.time_control,
                 eco: game.eco,
                 ply_count: game.ply_count,
+                orientation: game.orientation,
                 fen: fen.to_string(),
                 moves: {
                     let movetext = decode_game_to_movetext(&game.moves, fen).unwrap_or_default();
@@ -1629,6 +1663,7 @@ struct PgnGame {
     black_elo: Option<String>,
     ply_count: Option<String>,
     fen: Option<String>,
+    orientation: Option<String>,
     moves: Option<String>,
 }
 
@@ -1683,6 +1718,9 @@ impl PgnGame {
         }
         if let Some(ply_count) = self.ply_count.as_deref() {
             writeln!(writer, "[PlyCount \"{}\"]", ply_count)?;
+        }
+        if let Some(orientation) = self.orientation.as_deref() {
+            writeln!(writer, "[Orientation \"{}\"]", orientation)?;
         }
         if let Some(fen) = self.fen.as_deref() {
             writeln!(writer, "[SetUp \"1\"]")?;
@@ -1744,6 +1782,7 @@ pub async fn export_to_pgn(
                 white_elo: game.white_elo.map(|e| e.to_string()),
                 black_elo: game.black_elo.map(|e| e.to_string()),
                 ply_count: game.ply_count.map(|e| e.to_string()),
+                orientation: game.orientation.clone(),
                 fen: game.fen.clone(),
                 moves: decode_game_to_movetext(
                     &game.moves,
@@ -1846,6 +1885,7 @@ pub async fn write_db_game(
             games::fen.eq(temp_game.fen),
             games::moves.eq(temp_game.moves),
             games::pawn_home.eq(pawn_home),
+            games::orientation.eq(temp_game.orientation),
         ))
         .execute(db)?;
 

@@ -62,6 +62,7 @@ pub struct Game {
     pub fen: Option<String>,
     pub moves: Vec<u8>,
     pub pawn_home: i32,
+    pub orientation: Option<String>,
 }
 
 #[derive(Insertable, Debug)]
@@ -85,6 +86,7 @@ pub struct NewGame<'a> {
     pub fen: Option<&'a str>,
     pub moves: &'a [u8],
     pub pawn_home: i32,
+    pub orientation: Option<&'a str>,
 }
 
 #[derive(Default, Debug, Queryable, Serialize, Deserialize, Identifiable, Clone)]
@@ -173,5 +175,7 @@ pub struct NormalizedGame {
     pub eco: Option<String>,
     #[specta(optional)]
     pub ply_count: Option<i32>,
+    #[specta(optional)]
+    pub orientation: Option<String>,
     pub moves: String,
 }

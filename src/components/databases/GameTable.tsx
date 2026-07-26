@@ -24,6 +24,7 @@ import useSWR from "swr";
 import { useStore } from "zustand";
 import type { GameSort, NormalizedGame, Outcome } from "@/bindings";
 import { activeTabAtom, tabsAtom } from "@/state/atoms";
+import { normalizedGameToHeaders } from "@/utils/chess";
 import { query_games } from "@/utils/db";
 import { createTab } from "@/utils/tabs";
 import { DatabaseViewStateContext } from "./DatabaseViewStateContext";
@@ -219,7 +220,7 @@ function GameTable() {
               setTabs,
               setActiveTab,
               pgn: record.moves,
-              headers: record,
+              headers: normalizedGameToHeaders(record),
               gameOrigin: {
                 kind: "database",
                 database: file,

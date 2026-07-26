@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useSWRConfig } from "swr";
 import { commands, type NormalizedGame } from "@/bindings";
 import { activeTabAtom, tabsAtom } from "@/state/atoms";
+import { normalizedGameToHeaders } from "@/utils/chess";
 import { createTab } from "@/utils/tabs";
 import GameInfo from "../common/GameInfo";
 import GamePreview from "./GamePreview";
@@ -30,7 +31,7 @@ function GameCard({
     <Paper shadow="sm" p="sm" withBorder h="100%">
       <ScrollArea h="100%">
         <Stack h="100%" gap="xs">
-          <GameInfo headers={game} />
+          <GameInfo headers={normalizedGameToHeaders(game)} />
           <Divider />
           <Group justify="left">
             <Tooltip label={t("Board.Action.AnalyzeGame")}>
@@ -45,7 +46,7 @@ function GameCard({
                     setTabs,
                     setActiveTab,
                     pgn: game.moves,
-                    headers: game,
+                    headers: normalizedGameToHeaders(game),
                     gameOrigin: {
                       kind: "database",
                       database: file,
@@ -80,7 +81,7 @@ function GameCard({
             </Tooltip>
           </Group>
           <Divider />
-          <GamePreview pgn={game.moves} headers={game} showOpening />
+          <GamePreview pgn={game.moves} headers={normalizedGameToHeaders(game)} showOpening />
         </Stack>
       </ScrollArea>
     </Paper>

@@ -4,7 +4,7 @@ import { type Chess, normalizeMove } from "chessops/chess";
 import { INITIAL_FEN, makeFen, parseFen } from "chessops/fen";
 import { isPawns, parseComment } from "chessops/pgn";
 import { makeSan, parseSan } from "chessops/san";
-import { commands, type Outcome, type Score, type Token } from "@/bindings";
+import { commands, type NormalizedGame, type Outcome, type Score, type Token } from "@/bindings";
 import { ANNOTATION_INFO, isBasicAnnotation, NAG_INFO } from "./annotation";
 import { parseSanOrUci, positionFromFen } from "./chessops";
 import { harmonicMean, isPrefix, mean } from "./misc";
@@ -475,6 +475,21 @@ export async function parsePGN(pgn: string, initialFen?: string): Promise<TreeSt
     return tree;
 }
 
+export function isValidOrientation(value: string | null | undefined): value is "white" | "black" {
+    return value === "white" || value === "black";
+}
+
+/**
+ * Builds board headers from a database row, so that stored values such as the
+ * board orientation are preserved when a game is opened in a new tab.
+ */
+export function normalizedGameToHeaders(game: NormalizedGame): GameHeaders {
+    return {
+        ...game,
+        orientation: isValidOrientation(game.orientation) ? game.orientation : "white",
+    };
+}
+
 function getPgnHeaders(tokens: Token[]): GameHeaders {
     const headersN = new Map<string, string>();
 
@@ -507,10 +522,6 @@ function getPgnHeaders(tokens: Token[]): GameHeaders {
 
     const isValidOutcome = (value: string): value is Outcome => {
         return ["*", "1-0", "0-1", "1/2-1/2"].includes(value);
-    };
-
-    const isValidOrientation = (value: string): value is "white" | "black" => {
-        return ["white", "black"].includes(value);
     };
 
     const headers: GameHeaders = {

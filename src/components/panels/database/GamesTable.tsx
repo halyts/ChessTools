@@ -5,6 +5,7 @@ import { DataTable } from "mantine-datatable";
 import { memo, useEffect, useState } from "react";
 import type { NormalizedGame } from "@/bindings";
 import { activeTabAtom, tabsAtom } from "@/state/atoms";
+import { normalizedGameToHeaders } from "@/utils/chess";
 import { createTab } from "@/utils/tabs";
 
 function GamesTable({
@@ -46,7 +47,7 @@ function GamesTable({
           setTabs,
           setActiveTab,
           pgn: game.moves,
-          headers: game,
+          headers: normalizedGameToHeaders(game),
           gameOrigin: databasePath
             ? {
                 kind: "database",

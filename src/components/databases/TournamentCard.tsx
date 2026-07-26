@@ -11,6 +11,7 @@ import { useStore } from "zustand";
 import type { Event, NormalizedGame } from "@/bindings";
 import { activeTabAtom, tabsAtom } from "@/state/atoms";
 import type { DatabaseViewStore } from "@/state/store/database";
+import { normalizedGameToHeaders } from "@/utils/chess";
 import { getTournamentGames } from "@/utils/db";
 import { createTab } from "@/utils/tabs";
 import { DatabaseViewStateContext } from "./DatabaseViewStateContext";
@@ -151,7 +152,7 @@ function TournamentCard({ tournament, file }: { tournament: Event; file: string 
                           setTabs,
                           setActiveTab,
                           pgn: game.moves,
-                          headers: game,
+                          headers: normalizedGameToHeaders(game),
                           gameOrigin: {
                             kind: "database",
                             database: file,
