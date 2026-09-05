@@ -2081,6 +2081,7 @@ mod tests {
                 fen: None,
                 moves: &[],
                 pawn_home: 0,
+                orientation: None,
             },
         )
         .unwrap();
@@ -2180,6 +2181,7 @@ mod tests {
                     fen: None,
                     moves: &[],
                     pawn_home: 0,
+                    orientation: None,
                 },
             )
             .unwrap()
