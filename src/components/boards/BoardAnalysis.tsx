@@ -10,6 +10,7 @@ import {
 import { useLoaderData } from "@tanstack/react-router";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
 import type { Piece } from "chessops";
+import equal from "fast-deep-equal";
 import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -42,6 +43,9 @@ import BoardControls from "./BoardControls";
 import EditingCard from "./EditingCard";
 import EvalListener from "./EvalListener";
 
+// Delay before saving a position change, so that stepping through moves doesn't write on every step
+const POSITION_SAVE_DELAY = 1000;
+
 function BoardAnalysis() {
   const { t } = useTranslation();
 
@@ -57,13 +61,19 @@ function BoardAnalysis() {
   const store = useContext(TreeStateContext)!;
 
   const dirty = useStore(store, (s) => s.dirty);
+  const headers = useStore(store, (s) => s.headers);
+  const position = useStore(store, (s) => s.position);
+  // Position that is currently stored in the file/database
+  const savedPositionRef = useRef(position);
+  const pendingPositionSaveRef = useRef<(() => void) | null>(null);
 
   const reset = useStore(store, (s) => s.reset);
   const clearShapes = useStore(store, (s) => s.clearShapes);
   const setAnnotation = useStore(store, (s) => s.setAnnotation);
 
   const saveFile = useCallback(async () => {
-    saveToFile({
+    savedPositionRef.current = store.getState().position;
+    await saveToFile({
       dir: documentDir,
       setCurrentTab,
       tab: currentTab,
@@ -71,7 +81,8 @@ function BoardAnalysis() {
     });
   }, [setCurrentTab, currentTab, documentDir, store]);
   const userSaveFile = useCallback(async () => {
-    saveToFile({
+    savedPositionRef.current = store.getState().position;
+    await saveToFile({
       dir: documentDir,
       setCurrentTab,
       tab: currentTab,
@@ -84,6 +95,30 @@ function BoardAnalysis() {
       saveFile();
     }
   }, [hasPersistentOrigin, saveFile, autoSave, dirty]);
+
+  // Headers are replaced when another game is loaded into the tab, and that
+  // game is already positioned on its saved move.
+  useEffect(() => {
+    savedPositionRef.current = store.getState().position;
+  }, [headers, store]);
+
+  // Navigating doesn't make the game dirty, so the current position is saved
+  // separately (edits already save it together with the game).
+  const positionSaveEnabled = hasPersistentOrigin && autoSave && !dirty;
+  useEffect(() => {
+    if (!positionSaveEnabled || equal(position, savedPositionRef.current)) {
+      pendingPositionSaveRef.current = null;
+      return;
+    }
+    pendingPositionSaveRef.current = saveFile;
+    const timeout = setTimeout(() => {
+      pendingPositionSaveRef.current = null;
+      saveFile();
+    }, POSITION_SAVE_DELAY);
+    return () => clearTimeout(timeout);
+  }, [positionSaveEnabled, position, saveFile]);
+  // Don't lose a pending position save when the tab is closed
+  useEffect(() => () => pendingPositionSaveRef.current?.(), []);
 
   const addGame = useCallback(() => {
     if (!tabFile) return;

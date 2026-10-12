@@ -190,6 +190,9 @@ export function headersToPGN(game: GameHeaders): string {
     if (game.orientation) {
         headers += `[Orientation "${game.orientation}"]\n`;
     }
+    if (game.current_position && game.current_position.length > 0) {
+        headers += `[CurrentPosition "${JSON.stringify(game.current_position)}"]\n`;
+    }
     if (game.time_control) {
         headers += `[TimeControl "${game.time_control}"]\n`;
     }
@@ -471,8 +474,59 @@ export async function parsePGN(pgn: string, initialFen?: string): Promise<TreeSt
         pos?.turn === "black" ? 1 : 0,
     );
     tree.headers = headers;
-    tree.position = headers.start ?? [];
+    applySavedPosition(tree);
     return tree;
+}
+
+/**
+ * Parses a position path stored as a JSON array (e.g. "[0,0,1]").
+ * Returns undefined for missing or malformed values.
+ */
+export function parsePositionPath(value: string | null | undefined): number[] | undefined {
+    if (!value) return undefined;
+    try {
+        const parsed: unknown = JSON.parse(value);
+        if (
+            Array.isArray(parsed) &&
+            parsed.every((index) => Number.isInteger(index) && index >= 0)
+        ) {
+            return parsed;
+        }
+    } catch {
+        // ignore malformed values
+    }
+    return undefined;
+}
+
+/**
+ * Returns the longest prefix of the path that exists in the tree, so that a
+ * saved position inside a variation that no longer exists falls back to the
+ * point where the variation branched off.
+ */
+function getValidPathPrefix(root: TreeNode, path: number[]): number[] {
+    const valid: number[] = [];
+    let node = root;
+    for (const index of path) {
+        if (index >= node.children.length) break;
+        node = node.children[index];
+        valid.push(index);
+    }
+    return valid;
+}
+
+/**
+ * Moves the tree to the position saved in its headers (falling back to the
+ * repertoire start). The saved position is then removed from the headers: the
+ * live position is the source of truth and is written back on save.
+ */
+export function applySavedPosition(tree: TreeState) {
+    const { current_position, ...headers } = tree.headers;
+    tree.headers = headers;
+    if (current_position && current_position.length > 0) {
+        tree.position = getValidPathPrefix(tree.root, current_position);
+    } else {
+        tree.position = headers.start ?? [];
+    }
 }
 
 export function isValidOrientation(value: string | null | undefined): value is "white" | "black" {
@@ -487,6 +541,7 @@ export function normalizedGameToHeaders(game: NormalizedGame): GameHeaders {
     return {
         ...game,
         orientation: isValidOrientation(game.orientation) ? game.orientation : "white",
+        current_position: parsePositionPath(game.current_position),
     };
 }
 
@@ -515,6 +570,7 @@ function getPgnHeaders(tokens: Token[]): GameHeaders {
         Round,
         Start,
         Orientation,
+        CurrentPosition,
         TimeControl,
         Variant,
         ...other
@@ -538,6 +594,7 @@ function getPgnHeaders(tokens: Token[]): GameHeaders {
         event: Event ?? "",
         start: JSON.parse(Start ?? "[]"),
         orientation: isValidOrientation(Orientation) ? Orientation : "white",
+        current_position: parsePositionPath(CurrentPosition),
         time_control: TimeControl,
         variant: Variant,
         other: other,

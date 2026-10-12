@@ -40,6 +40,7 @@ CREATE TABLE Games (
     Moves BLOB,
     PawnHome BLOB,
     Orientation TEXT,
+    CurrentPosition TEXT,
     FOREIGN KEY(EventID) REFERENCES Events,
     FOREIGN KEY(SiteID) REFERENCES Sites,
     FOREIGN KEY(WhiteID) REFERENCES Players,

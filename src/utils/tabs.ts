@@ -6,7 +6,7 @@ import type { StoreApi } from "zustand";
 import { commands } from "@/bindings";
 import { type FileMetadata, fileMetadataSchema } from "@/components/files/file";
 import type { TreeStoreState } from "@/state/store/tree";
-import { getPGN, parsePGN } from "./chess";
+import { applySavedPosition, getPGN, parsePGN } from "./chess";
 import { type GameHeaders, getGameName } from "./treeReducer";
 
 const INVALID_FILENAME_CHARS = /[\\/:*?"<>|]+/g;
@@ -116,6 +116,7 @@ export async function createTab({
         const tree = await parsePGN(pgn, headers?.fen);
         if (headers) {
             tree.headers = headers;
+            applySavedPosition(tree);
             if (position) {
                 tree.position = position;
             }
@@ -168,8 +169,9 @@ export async function saveToFile({
             : undefined;
     const databaseOrigin = currentOrigin?.kind === "database" ? currentOrigin : undefined;
     const isTempFile = currentOrigin?.kind === "temp_file";
-    const pgn = `${getPGN(store.getState().root, {
-        headers: store.getState().headers,
+    const { root, headers, position } = store.getState();
+    const pgn = `${getPGN(root, {
+        headers: { ...headers, current_position: position },
         comments: true,
         extraMarkups: true,
         glyphs: true,
@@ -185,7 +187,6 @@ export async function saveToFile({
     if (fileOrigin && !(isTempFile && isUserSave)) {
         filePath = fileOrigin.file.path;
     } else {
-        const headers = store.getState().headers;
         const suggestedName = getDefaultGameFilename(headers) || "Game";
         const defaultPath = await resolve(dir, `${suggestedName}.pgn`);
         const userChoice = await save({

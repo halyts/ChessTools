@@ -172,6 +172,7 @@ export async function convertToNormalized(data: PositionGames): Promise<Normaliz
       const { headers, root } = await parsePGN(pgn);
       const normalized: NormalizedGame = {
         ...headers,
+        current_position: undefined,
         id: i,
         white_id: 0,
         black_id: 0,

@@ -159,12 +159,14 @@ fn upgrade_schema(conn: &mut SqliteConnection) -> Result<(), diesel::result::Err
         return Ok(());
     }
 
-    let has_orientation: i64 = diesel::dsl::sql::<diesel::sql_types::BigInt>(
-        "SELECT COUNT(*) FROM pragma_table_info('Games') WHERE name = 'Orientation'",
-    )
-    .get_result(conn)?;
-    if has_orientation == 0 {
-        conn.batch_execute("ALTER TABLE Games ADD COLUMN Orientation TEXT;")?;
+    for column in ["Orientation", "CurrentPosition"] {
+        let has_column: i64 = diesel::dsl::sql::<diesel::sql_types::BigInt>(&format!(
+            "SELECT COUNT(*) FROM pragma_table_info('Games') WHERE name = '{column}'"
+        ))
+        .get_result(conn)?;
+        if has_column == 0 {
+            conn.batch_execute(&format!("ALTER TABLE Games ADD COLUMN {column} TEXT;"))?;
+        }
     }
 
     Ok(())
@@ -241,6 +243,7 @@ pub struct TempGame {
     pub eco: Option<String>,
     pub fen: Option<String>,
     pub orientation: Option<String>,
+    pub current_position: Option<String>,
     pub moves: Vec<u8>,
     pub position: Chess,
     pub material_count: MaterialColor,
@@ -299,6 +302,7 @@ impl TempGame {
             moves: self.moves.as_slice(),
             pawn_home: pawn_home as i32,
             orientation: self.orientation.as_deref(),
+            current_position: self.current_position.as_deref(),
         };
 
         create_game(db, new_game)?;
@@ -385,6 +389,8 @@ impl Visitor for Importer {
             if orientation == "white" || orientation == "black" {
                 self.game.orientation = Some(orientation);
             }
+        } else if key == b"CurrentPosition" {
+            self.game.current_position = Some(value.decode_utf8_lossy().into_owned());
         } else if key == b"FEN" {
             if value.as_bytes() == b"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" {
                 self.game.fen = None;
@@ -1177,6 +1183,7 @@ fn normalize_games(games: Vec<(Game, Player, Player, Event, Site)>) -> Vec<Norma
                 eco: game.eco,
                 ply_count: game.ply_count,
                 orientation: game.orientation,
+                current_position: game.current_position,
                 fen: fen.to_string(),
                 moves: {
                     let movetext = decode_game_to_movetext(&game.moves, fen).unwrap_or_default();
@@ -1664,6 +1671,7 @@ struct PgnGame {
     ply_count: Option<String>,
     fen: Option<String>,
     orientation: Option<String>,
+    current_position: Option<String>,
     moves: Option<String>,
 }
 
@@ -1721,6 +1729,9 @@ impl PgnGame {
         }
         if let Some(orientation) = self.orientation.as_deref() {
             writeln!(writer, "[Orientation \"{}\"]", orientation)?;
+        }
+        if let Some(current_position) = self.current_position.as_deref() {
+            writeln!(writer, "[CurrentPosition \"{}\"]", current_position)?;
         }
         if let Some(fen) = self.fen.as_deref() {
             writeln!(writer, "[SetUp \"1\"]")?;
@@ -1783,6 +1794,7 @@ pub async fn export_to_pgn(
                 black_elo: game.black_elo.map(|e| e.to_string()),
                 ply_count: game.ply_count.map(|e| e.to_string()),
                 orientation: game.orientation.clone(),
+                current_position: game.current_position.clone(),
                 fen: game.fen.clone(),
                 moves: decode_game_to_movetext(
                     &game.moves,
@@ -1886,6 +1898,7 @@ pub async fn write_db_game(
             games::moves.eq(temp_game.moves),
             games::pawn_home.eq(pawn_home),
             games::orientation.eq(temp_game.orientation),
+            games::current_position.eq(temp_game.current_position),
         ))
         .execute(db)?;
 
@@ -2082,6 +2095,7 @@ mod tests {
                 moves: &[],
                 pawn_home: 0,
                 orientation: None,
+                current_position: None,
             },
         )
         .unwrap();
@@ -2182,6 +2196,7 @@ mod tests {
                     moves: &[],
                     pawn_home: 0,
                     orientation: None,
+                    current_position: None,
                 },
             )
             .unwrap()

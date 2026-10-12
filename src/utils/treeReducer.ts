@@ -157,6 +157,8 @@ export type GameHeaders = {
     // Repertoire headers
     start?: number[];
     orientation?: "white" | "black";
+    // Path of the position shown when the game was last saved
+    current_position?: number[];
 };
 
 export function getGameName(headers: GameHeaders) {

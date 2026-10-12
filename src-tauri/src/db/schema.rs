@@ -83,6 +83,8 @@ diesel::table! {
         pawn_home -> Integer,
         #[sql_name = "Orientation"]
         orientation -> Nullable<Text>,
+        #[sql_name = "CurrentPosition"]
+        current_position -> Nullable<Text>,
     }
 }
 
